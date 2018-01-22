@@ -1,5 +1,25 @@
 package mapreduce
 
+import (
+	"os"
+	"encoding/json"
+	"fmt"
+	"io"
+	"sort"
+)
+
+type ByKey []KeyValue
+
+func (k ByKey) Len() int {
+	return len(k)
+}
+func (k ByKey) Swap(i, j int) {
+	k[i], k[j] = k[j], k[i]
+}
+func (k ByKey) Less(i, j int) bool {
+	return k[i].Key < k[j].Key
+}
+
 // doReduce manages one reduce task: it reads the intermediate
 // key/value pairs (produced by the map phase) for this task, sorts the
 // intermediate key/value pairs by key, calls the user-defined reduce function
@@ -43,4 +63,47 @@ func doReduce(
 	// }
 	// file.Close()
 	//
+	out, err := os.Create(outFile)
+	if err != nil {
+		fmt.Print(err)
+	}
+	outJsonEncoder := json.NewEncoder(out)
+
+	var kvs []KeyValue
+	for mapTaskNumber := 0; mapTaskNumber < nMap; mapTaskNumber++ {
+		fileName := reduceName(jobName, mapTaskNumber, reduceTaskNumber)
+		kvs = append(kvs, readIntermediateFile(fileName)...)
+	}
+
+	sort.Sort(ByKey(kvs))
+
+	var valuesOfSameKey []string
+	for i := 0; i < len(kvs); i++ {
+		valuesOfSameKey = append(valuesOfSameKey, kvs[i].Value)
+		if (i == len(kvs) - 1) || (kvs[i].Key != kvs[i + 1].Key)  {
+			reduceValue := reduceF(kvs[i].Key, valuesOfSameKey)
+			outJsonEncoder.Encode(&KeyValue{kvs[i].Key, reduceValue})
+			valuesOfSameKey = []string{}
+		}
+	}
+	out.Close()
+}
+
+func readIntermediateFile(fileName string) []KeyValue {
+	inFile, err := os.Open(fileName)
+	if err != nil {
+		fmt.Print(err)
+	}
+	inJsonDecoder := json.NewDecoder(inFile)
+	var results []KeyValue
+	for {
+		var kv KeyValue
+		if err := inJsonDecoder.Decode(&kv); err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Print(err)
+		}
+		results = append(results, kv)
+	}
+	return results
 }

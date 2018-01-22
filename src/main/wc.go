@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"mapreduce"
 	"os"
+	"strings"
+	"unicode"
 )
 
 //
@@ -14,7 +16,19 @@ import (
 // of key/value pairs.
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
-	// TODO: you have to write this function
+	splitFunc := func(c rune) bool {
+		return !unicode.IsLetter(c)
+	}
+	words := strings.FieldsFunc(contents, splitFunc)
+	countWords := make(map[string]int)
+	for _, word := range words {
+		countWords[word] += 1
+	}
+	var results []mapreduce.KeyValue
+	for key, value := range countWords {
+		results = append(results, mapreduce.KeyValue{key, string(value)})
+	}
+	return results
 }
 
 //
@@ -24,6 +38,11 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 //
 func reduceF(key string, values []string) string {
 	// TODO: you also have to write this function
+	sum := 0
+	for value := range values {
+		sum += int(value)
+	}
+	return string(sum)
 }
 
 // Can be run in 3 ways:
