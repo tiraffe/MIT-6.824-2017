@@ -30,7 +30,35 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	// Remember that workers may fail, and that any given worker may finish
 	// multiple tasks.
 	//
-	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-	//
+
+	doneTasks := make(chan int)
+	for id := 0; id < ntasks; id++ {
+		go func(taskId int) {
+			var taskArgs DoTaskArgs
+			switch phase {
+			case mapPhase:
+				taskArgs = DoTaskArgs{jobName, mapFiles[taskId], phase, taskId, n_other}
+			case reducePhase:
+				taskArgs = DoTaskArgs{jobName, "", phase, taskId, n_other}
+			}
+
+			for {
+				worker := <- registerChan
+				if call(worker, "Worker.DoTask", &taskArgs, nil) {
+					doneTasks <- taskId
+					registerChan <- worker
+					break
+				}
+				// Should not push failed worker back to chan. If all 
+				// the tasks try to push back failed worker meanwhile  
+				// a new worker is added, the registerChan will be stuck.
+				fmt.Printf("Task %d has Faild. Retrying...\n", taskId)
+			}
+		}(id)
+	}
+	// waiting for all tasks to be finished
+	for taskId := 0; taskId < ntasks; taskId++ {
+		<- doneTasks
+	}
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }
