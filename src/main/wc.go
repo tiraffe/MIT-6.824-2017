@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"unicode"
+	"strconv"
 )
 
 //
@@ -26,7 +27,7 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 	}
 	var results []mapreduce.KeyValue
 	for key, value := range countWords {
-		results = append(results, mapreduce.KeyValue{key, string(value)})
+		results = append(results, mapreduce.KeyValue{key, strconv.Itoa(value)})
 	}
 	return results
 }
@@ -39,10 +40,14 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 func reduceF(key string, values []string) string {
 	// TODO: you also have to write this function
 	sum := 0
-	for value := range values {
-		sum += int(value)
+	for _, value := range values {
+		v, err := strconv.Atoi(value)
+		if err != nil {
+			fmt.Print(err)
+		}
+		sum += v
 	}
-	return string(sum)
+	return strconv.Itoa(sum)
 }
 
 // Can be run in 3 ways:
