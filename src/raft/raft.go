@@ -25,8 +25,8 @@ import (
 	"time"
 )
 
-// import "bytes"
-// import "encoding/gob"
+import "bytes"
+import "encoding/gob"
 
 
 
@@ -109,26 +109,30 @@ func (rf *Raft) GetState() (int, bool) {
 // see paper's Figure 2 for a description of what should be persistent.
 //
 func (rf *Raft) persist() {
-	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := gob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(rf.currentTerm)
+	e.Encode(rf.votedFor)
+	e.Encode(rf.log)
+
+	e.Encode(rf.commitIndex)
+	e.Encode(rf.lastApplied)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
 // restore previously persisted state.
 //
 func (rf *Raft) readPersist(data []byte) {
-	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := gob.NewDecoder(r)
-	// d.Decode(&rf.xxx)
-	// d.Decode(&rf.yyy)
+	r := bytes.NewBuffer(data)
+	d := gob.NewDecoder(r)
+	d.Decode(&rf.currentTerm)
+	d.Decode(&rf.votedFor)
+	d.Decode(&rf.log)
+
+	d.Decode(&rf.commitIndex)
+	d.Decode(&rf.lastApplied)
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
@@ -160,7 +164,6 @@ type AppendEntriesReply struct {
 
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	
 	rf.updateCurrentTerm(args.Term)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -197,6 +200,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log) - 1)
 	}
 	rf.receivedHeartBeat = true
+	rf.persist()
 }
 
 
@@ -261,6 +265,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if rf.state == Follower {
 		rf.receivedHeartBeat = true
 	}
+	rf.persist()
 }
 
 //
@@ -325,6 +330,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if isLeader {
 		DPrintf("Term[%d] -- Peer[%d] new command: index[%d] - [%d]\n", term, rf.me, index, command)
 		rf.log = append(rf.log, Log{term, command})
+		rf.persist()
 		go rf.broadcastAppendEntries()
 	}
 	rf.mu.Unlock()
@@ -359,8 +365,10 @@ func (rf *Raft) broadcastAppendEntries() {
 						rf.matchIndex[server] = rf.nextIndex[server] - 1
 						rf.mu.Unlock()
 						break
+					} else if !reply.Success {
+						// optimize the decrement
+						nextIndex /= 2
 					}
-					nextIndex --
 				}
 			}(idx)
 		}
@@ -373,7 +381,7 @@ func (rf *Raft) broadcastAppendEntries() {
 // turn off debug output from this instance.
 //
 func (rf *Raft) Kill() {
-	// Your code here, if desired.
+	DPrintf("Term[%d] -- Peer[%d] ---------------- KILL ------------------\n", rf.currentTerm, rf.me)
 }
 
 //
@@ -401,20 +409,23 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.lastApplied = 0
 	rf.commitIndex = 0
-	// Your initialization code here (2A, 2B, 2C).
+
+	rf.nextIndex = make([]int, len(rf.peers))
+	rf.matchIndex = make([]int, len(rf.peers))
+	
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
 
 	// create a background goroutine that will kick off 
 	// leader election periodically by sending out RequestVote 
 	// RPCs when it hasn't heard from another peer for a while.
 	go rf.checkElectionTimeout()
+
 	go rf.loopForHeartBeat()
-	
 	go rf.loopForApplyMsg(applyCh)
 	go rf.loopForCommitIndex()
-
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
-
+	
+	DPrintf("Term[%d] -- Peer[%d] ---------------- START ------------------\n", rf.currentTerm, rf.me)
 
 	return rf
 }
@@ -487,6 +498,7 @@ func (rf *Raft) handleElection(term int) {
 			for idx, _ := range rf.nextIndex {
 				rf.nextIndex[idx] = len(rf.log)
 			}
+			rf.persist()
 			DPrintf("Term[%d] -- Peer[%d] changed to Leader.\n", rf.currentTerm, rf.me)
 		}
 		rf.mu.Unlock()
@@ -502,6 +514,7 @@ func (rf *Raft) checkElectionTimeout() {
 			rf.currentTerm += 1
 			rf.votedFor = rf.me
 			DPrintf("Term[%d] -- Peer[%d] changed to Candidate.\n", rf.currentTerm, rf.me)
+			rf.persist()
 			go rf.handleElection(rf.currentTerm)
 		}
 		rf.receivedHeartBeat = false
@@ -515,6 +528,7 @@ func (rf *Raft) updateCurrentTerm(term int) {
 		rf.currentTerm = term
 		rf.state = Follower
 		rf.votedFor = -1
+		rf.persist()
 		DPrintf("Term[%d] -- Peer[%d] changed to Follower.\n", rf.currentTerm, rf.me)
 	}
 	rf.mu.Unlock()
@@ -534,6 +548,7 @@ func (rf *Raft) loopForCommitIndex() {
 			for medianIndex > rf.commitIndex {
 				if medianIndex < len(rf.log) && rf.log[medianIndex].Term == rf.currentTerm {
 					rf.commitIndex = medianIndex
+					rf.persist()
 					DPrintf("Term[%d] -- Peer[%d] update commitIndex: %d from most agreement.\n", 
 						rf.currentTerm, rf.me, rf.commitIndex)
 					break
@@ -551,12 +566,13 @@ func (rf *Raft) loopForApplyMsg(applyCh chan ApplyMsg) {
 	for {
 		rf.mu.Lock()
 		if rf.lastApplied < rf.commitIndex {
-			rf.lastApplied += 1
+			rf.lastApplied ++
 			msg := ApplyMsg{rf.lastApplied, rf.log[rf.lastApplied].Command, false, []byte{}}
 			DPrintf("Term[%d] -- Peer[%d] sending applyMsg: %v.\n", rf.currentTerm, rf.me, msg)
-			go func(msg ApplyMsg) {
-				applyCh <- msg
+			go func(m ApplyMsg) {
+				applyCh <- m
 			}(msg)
+			rf.persist()
 		}
 		rf.mu.Unlock()
 
