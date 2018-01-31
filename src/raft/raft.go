@@ -107,9 +107,7 @@ func (rf *Raft) persist() {
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.log)
-	e.Encode(rf.state)
-	e.Encode(rf.nextIndex)
-	e.Encode(rf.matchIndex)
+
 	e.Encode(rf.commitIndex)
 	e.Encode(rf.lastApplied)
 	data := w.Bytes()
@@ -125,9 +123,7 @@ func (rf *Raft) readPersist(data []byte) {
 	d.Decode(&rf.currentTerm)
 	d.Decode(&rf.votedFor)
 	d.Decode(&rf.log)
-	d.Decode(&rf.state)
-	d.Decode(&rf.nextIndex)
-	d.Decode(&rf.matchIndex)
+
 	d.Decode(&rf.commitIndex)
 	d.Decode(&rf.lastApplied)
 	if data == nil || len(data) < 1 { // bootstrap without any state?
@@ -327,6 +323,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) getAppendEntriesArgs(nextIndex int) (*AppendEntriesArgs, bool) {
 	rf.mu.Lock()
 	// Entries can be [], which represents HeartBeat.
+	nextIndex = min(nextIndex, len(rf.log))
 	entries := rf.log[nextIndex:]
 	prevIndex := nextIndex - 1
 	args := AppendEntriesArgs{rf.currentTerm, rf.me, prevIndex, 
@@ -354,7 +351,6 @@ func (rf *Raft) broadcastAppendEntries() {
 						rf.mu.Lock()
 						rf.nextIndex[server] = nextIndex + len(args.Entries)
 						rf.matchIndex[server] = rf.nextIndex[server] - 1
-						rf.persist()
 						rf.mu.Unlock()
 						break
 					} else if !reply.Success {
@@ -540,18 +536,16 @@ func (rf *Raft) loopForCommitIndex() {
 
 func (rf *Raft) loopForApplyMsg(applyCh chan ApplyMsg) {
 	for {
-		rf.mu.Lock()
-		if rf.lastApplied < rf.commitIndex {
-			rf.lastApplied ++
-			msg := ApplyMsg{rf.lastApplied, rf.log[rf.lastApplied].Command, false, []byte{}}
-			DPrintf("Term[%d] -- Peer[%d] sending applyMsg: %v.  -- %v\n", rf.currentTerm, rf.me, msg, rf.log)
-			go func(m ApplyMsg) {
-				applyCh <- m
-			}(msg)
-			rf.persist()
-		}
-		rf.mu.Unlock()
+		for rf.lastApplied < rf.commitIndex {
+			msg := ApplyMsg{rf.lastApplied + 1, rf.log[rf.lastApplied + 1].Command, false, []byte{}}
+			applyCh <- msg
 
+			DPrintf("Term[%d] -- Peer[%d] sending applyMsg: %v.  -- %v\n", rf.currentTerm, rf.me, msg, rf.log)
+			rf.mu.Lock()
+			rf.lastApplied ++
+			rf.persist()
+			rf.mu.Unlock()
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
 }
