@@ -107,9 +107,8 @@ func (rf *Raft) persist() {
 	e.Encode(rf.currentTerm)
 	e.Encode(rf.votedFor)
 	e.Encode(rf.log)
-
 	e.Encode(rf.commitIndex)
-	e.Encode(rf.lastApplied)
+
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
 }
@@ -123,9 +122,8 @@ func (rf *Raft) readPersist(data []byte) {
 	d.Decode(&rf.currentTerm)
 	d.Decode(&rf.votedFor)
 	d.Decode(&rf.log)
-
 	d.Decode(&rf.commitIndex)
-	d.Decode(&rf.lastApplied)
+
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
@@ -471,7 +469,6 @@ func (rf *Raft) handleElection(term int) {
 			for idx, _ := range rf.nextIndex {
 				rf.nextIndex[idx] = len(rf.log)
 			}
-			rf.persist()
 			DPrintf("Term[%d] -- Peer[%d] changed to Leader.\n", rf.currentTerm, rf.me)
 		}
 		rf.mu.Unlock()
@@ -538,13 +535,9 @@ func (rf *Raft) loopForApplyMsg(applyCh chan ApplyMsg) {
 	for {
 		for rf.lastApplied < rf.commitIndex {
 			msg := ApplyMsg{rf.lastApplied + 1, rf.log[rf.lastApplied + 1].Command, false, []byte{}}
-			applyCh <- msg
-
 			DPrintf("Term[%d] -- Peer[%d] sending applyMsg: %v.  -- %v\n", rf.currentTerm, rf.me, msg, rf.log)
-			rf.mu.Lock()
+			applyCh <- msg
 			rf.lastApplied ++
-			rf.persist()
-			rf.mu.Unlock()
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

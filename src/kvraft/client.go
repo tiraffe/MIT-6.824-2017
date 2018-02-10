@@ -1,12 +1,18 @@
 package raftkv
 
-import "labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"time"
+	"labrpc"
+	"crypto/rand"
+	"math/big"
+)
 
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
+	lastLeaderId int
+	clientId int64
+	opIndex int64
 	// You will have to modify this struct.
 }
 
@@ -20,6 +26,10 @@ func nrand() int64 {
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
+	ck.lastLeaderId = 0
+	ck.clientId = nrand()
+	ck.opIndex = 0
+
 	// You'll have to add code here.
 	return ck
 }
@@ -37,9 +47,30 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) Get(key string) string {
-
-	// You will have to modify this function.
-	return ""
+	DPrintf("Get(%s): Strat...", key)
+	ck.opIndex ++
+	
+	var result string
+	leaderId := ck.lastLeaderId
+	for {
+		args := GetArgs{key, ck.clientId, ck.opIndex}
+		reply := GetReply{}
+		ok := ck.servers[leaderId].Call("RaftKV.Get", &args, &reply)
+		if ok && !reply.WrongLeader {
+			if reply.Err == OK {
+				result = reply.Value
+				break
+			} else if reply.Err == ErrNoKey {
+				result = ""
+				break
+			}
+		}
+		leaderId = (leaderId + 1) % len(ck.servers)
+		time.Sleep(10 * time.Millisecond)
+	}
+	ck.lastLeaderId = leaderId
+	DPrintf("Get(%s): End[%v]...", key, result)
+	return result
 }
 
 //
@@ -53,7 +84,24 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	// You will have to modify this function.
+	DPrintf("PutAppend(%s, %s, %s): Strat...", key, value, op)
+	ck.opIndex ++
+
+	leaderId := ck.lastLeaderId
+	for {
+		args := PutAppendArgs{key, value, op, ck.clientId, ck.opIndex}
+		reply := PutAppendReply{}
+		ok := ck.servers[leaderId].Call("RaftKV.PutAppend", &args, &reply)
+		if ok && !reply.WrongLeader && reply.Err == OK {
+			break
+		}
+		leaderId = (leaderId + 1) % len(ck.servers)
+		time.Sleep(10 * time.Millisecond)
+	}
+	ck.lastLeaderId = leaderId
+
+	DPrintf("PutAppend(%s, %s, %s): End...", key, value, op)
+	return
 }
 
 func (ck *Clerk) Put(key string, value string) {
