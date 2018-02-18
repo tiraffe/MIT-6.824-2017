@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+import "bytes"
+
 const Debug = 1
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
@@ -40,13 +42,16 @@ type RaftKV struct {
 	data 	map[string]string
 	callbackCh map[int64]chan int64 // [clientId] result
 	lastCommitedOpIndex map[int64]int64 
-	// Your definitions here.
+
+	lastCommitedLogIndex int
 }
 
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
+
+	DPrintf("# [%d]: Get(%v, %v): start...", kv.me, args, reply)
 	_, isLeader := kv.rf.GetState()
 	reply.Err = OK
 	if isLeader {
@@ -69,10 +74,9 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 			} else {
 				reply.Err = DirtyRead
 			}
-		case <- time.After(5 * time.Second):
+		case <- time.After(1 * time.Second):
 			reply.Err = TimeOut
 		}
-		delete(kv.callbackCh, args.ClientId)
 	} else {
 		reply.WrongLeader = true
 	}
@@ -81,6 +85,7 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
+
 	DPrintf("# [%d]: PutAppend(%v, %v): start...", kv.me, args, reply)
 	_, isLeader := kv.rf.GetState()
 	if isLeader {
@@ -98,7 +103,7 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			} else {
 				reply.Err = DirtyRead
 			}
-		case <- time.After(5 * time.Second):
+		case <- time.After(1 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -149,15 +154,12 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
-	// for _, entity := range *(kv.rf).log {
-	// 	kv.ApplyCommand(entity.Command.(Op))
-	// }
-	go kv.LoopForApplyMsg()
+	go kv.loopForApplyMsg()
 
 	return kv
 }
 
-func (kv *RaftKV) ApplyCommand(command Op) {
+func (kv *RaftKV) ApplyCommand(command Op) bool {
 	if kv.lastCommitedOpIndex[command.ClientId] < command.OpIndex {
 		switch command.OpType {
 		case "Get":
@@ -170,24 +172,55 @@ func (kv *RaftKV) ApplyCommand(command Op) {
 		
 		kv.lastCommitedOpIndex[command.ClientId] = command.OpIndex
 		DPrintf("# [%d]: Applied %v.", kv.me, command)
+		return true
 	}
+	return false
 }
 
-func (kv *RaftKV) LoopForApplyMsg() {
+func (kv *RaftKV) loopForApplyMsg() {
 	for {
 		select {
 		case msg := <- kv.applyCh:
-			command := msg.Command.(Op)
-			kv.ApplyCommand(command)
+			if msg.UseSnapshot {
+				data := msg.Snapshot
+				kv.deserializeSnapshot(data)
+				kv.lastCommitedLogIndex = msg.Index
+			} else {
+				command := msg.Command.(Op)
+				if kv.ApplyCommand(command) {
+					kv.lastCommitedLogIndex = msg.Index
+				}
+				
+				select {
+				case kv.callbackCh[command.ClientId] <- command.OpIndex:
+					DPrintf("# [%d]: Callback succeeded.", kv.me)
+				default:
+					DPrintf("# [%d]: Callback failed.", kv.me)
+				}
 
-			select {
-			case kv.callbackCh[command.ClientId] <- command.OpIndex:
-				DPrintf("# [%d]: Callback success.", kv.me)
-			default:
-				DPrintf("# [%d]: Callback failed.", kv.me)
+				if kv.maxraftstate != -1 && kv.rf.GetStateSize() >= kv.maxraftstate {
+					DPrintf("# [%d]: Start SaveSnapshot.", kv.me)
+					data := kv.serializeSnapshot()
+					go kv.rf.UpdateSnapshot(data, kv.lastCommitedLogIndex)
+				}
 			}
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+}
+
+func (kv *RaftKV) serializeSnapshot() []byte {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(kv.data)
+	e.Encode(kv.lastCommitedOpIndex)
+	return w.Bytes()
+}
+
+func (kv *RaftKV) deserializeSnapshot(data []byte) {
+	r := bytes.NewBuffer(data)
+	d := gob.NewDecoder(r)
+	d.Decode(&kv.data)
+	d.Decode(&kv.lastCommitedOpIndex)
 }

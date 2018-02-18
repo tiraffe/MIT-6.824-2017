@@ -65,7 +65,9 @@ func (ck *Clerk) Get(key string) string {
 				break
 			}
 		}
-		leaderId = (leaderId + 1) % len(ck.servers)
+		if reply.Err != TimeOut {
+			leaderId = (leaderId + 1) % len(ck.servers)
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	ck.lastLeaderId = leaderId
@@ -95,7 +97,9 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		if ok && !reply.WrongLeader && reply.Err == OK {
 			break
 		}
-		leaderId = (leaderId + 1) % len(ck.servers)
+		if reply.Err != TimeOut {
+			leaderId = (leaderId + 1) % len(ck.servers)
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	ck.lastLeaderId = leaderId
