@@ -4,7 +4,6 @@ const (
 	OK       = "OK"
 	ErrNoKey = "ErrNoKey"
 	TimeOut  = "TimeOut"
-	DirtyRead = "DirtyRead"
 )
 
 type Err string

@@ -13,7 +13,6 @@ type Clerk struct {
 	lastLeaderId int
 	clientId int64
 	opIndex int64
-	// You will have to modify this struct.
 }
 
 func nrand() int64 {
@@ -30,7 +29,6 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck.clientId = nrand()
 	ck.opIndex = 0
 
-	// You'll have to add code here.
 	return ck
 }
 
@@ -71,6 +69,7 @@ func (ck *Clerk) Get(key string) string {
 		time.Sleep(10 * time.Millisecond)
 	}
 	ck.lastLeaderId = leaderId
+
 	DPrintf("Get(%s): End[%v]...", key, result)
 	return result
 }
