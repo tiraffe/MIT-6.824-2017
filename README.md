@@ -5,3 +5,5 @@
 - [x] Lab 2: Raft
 - [x] Lab 3: KV Raft
 - [ ] Lab 4: Sharded KV
+  - [x] Part A: The Shard Master
+  - [ ] Part B: Sharded Key/Value Server
