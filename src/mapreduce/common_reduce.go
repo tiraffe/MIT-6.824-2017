@@ -1,10 +1,10 @@
 package mapreduce
 
 import (
-	"os"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 )
 
@@ -80,7 +80,7 @@ func doReduce(
 	var valuesOfSameKey []string
 	for i := 0; i < len(kvs); i++ {
 		valuesOfSameKey = append(valuesOfSameKey, kvs[i].Value)
-		if (i == len(kvs) - 1) || (kvs[i].Key != kvs[i + 1].Key)  {
+		if (i == len(kvs)-1) || (kvs[i].Key != kvs[i+1].Key) {
 			reduceValue := reduceF(kvs[i].Key, valuesOfSameKey)
 			outJsonEncoder.Encode(&KeyValue{kvs[i].Key, reduceValue})
 			valuesOfSameKey = []string{}

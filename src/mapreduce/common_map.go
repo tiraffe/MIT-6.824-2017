@@ -1,11 +1,11 @@
 package mapreduce
 
 import (
+	"encoding/json"
+	"fmt"
 	"hash/fnv"
 	"io/ioutil"
 	"os"
-	"encoding/json"
-	"fmt"
 )
 
 // doMap manages one map task: it reads one of the input files

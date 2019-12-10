@@ -43,14 +43,14 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 			}
 
 			for {
-				worker := <- registerChan
+				worker := <-registerChan
 				if call(worker, "Worker.DoTask", &taskArgs, nil) {
 					doneTasks <- taskId
 					registerChan <- worker
 					break
 				}
-				// Should not push failed worker back to chan. If all 
-				// the tasks try to push back failed worker meanwhile  
+				// Should not push failed worker back to chan. If all
+				// the tasks try to push back failed worker meanwhile
 				// a new worker is added, the registerChan will be stuck.
 				fmt.Printf("Task %d has Faild. Retrying...\n", taskId)
 			}
@@ -58,7 +58,7 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	}
 	// waiting for all tasks to be finished
 	for taskId := 0; taskId < ntasks; taskId++ {
-		<- doneTasks
+		<-doneTasks
 	}
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }

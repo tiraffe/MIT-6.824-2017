@@ -31,11 +31,11 @@ func reduceF(key string, values []string) string {
 	last := 0
 	for i, _ := range values {
 		if values[i] != values[last] {
-			last ++
+			last++
 			values[last] = values[i]
 		}
 	}
-	values = values[:last + 1]
+	values = values[:last+1]
 
 	return fmt.Sprintf("%d %s", len(values), strings.Join(values, ","))
 }

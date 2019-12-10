@@ -1,12 +1,12 @@
 package raftkv
 
 import (
-	"time"
 	"encoding/gob"
 	"labrpc"
 	"log"
 	"raft"
 	"sync"
+	"time"
 )
 
 import "bytes"
@@ -21,11 +21,11 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 type Op struct {
-	Key			string
-	Value		string	
-	ClientId	int64
-	OpType		string
-	OpIndex		int64
+	Key      string
+	Value    string
+	ClientId int64
+	OpType   string
+	OpIndex  int64
 }
 
 type RaftKV struct {
@@ -36,13 +36,12 @@ type RaftKV struct {
 
 	maxraftstate int // snapshot if log grows this big
 
-	data 	map[string]string
-	callbackCh map[int64]chan Result // [clientId] result
-	lastCommitedOpIndex map[int64]int64 
+	data                map[string]string
+	callbackCh          map[int64]chan Result // [clientId] result
+	lastCommitedOpIndex map[int64]int64
 
 	lastCommitedLogIndex int
 }
-
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	DPrintf("# [%d]: Get(%v, %v): start...", kv.me, args, reply)
@@ -59,7 +58,7 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 		kv.rf.Start(Op{args.Key, "", args.ClientId, "Get", args.OpIndex})
 
 		select {
-		case res := <- kv.callbackCh[args.ClientId]:
+		case res := <-kv.callbackCh[args.ClientId]:
 			if res.OpIndex == args.OpIndex {
 				if res.Value != "" {
 					reply.Err = OK
@@ -68,7 +67,7 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 					reply.Err = ErrNoKey
 				}
 			}
-		case <- time.After(2 * time.Second):
+		case <-time.After(2 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -89,15 +88,15 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			kv.callbackCh[args.ClientId] = make(chan Result)
 		}
 		kv.mu.Unlock()
-		
+
 		kv.rf.Start(Op{args.Key, args.Value, args.ClientId, args.Op, args.OpIndex})
-		
+
 		select {
-		case res := <- kv.callbackCh[args.ClientId]:
+		case res := <-kv.callbackCh[args.ClientId]:
 			if res.OpIndex >= args.OpIndex {
 				reply.Err = OK
 			}
-		case <- time.After(2 * time.Second):
+		case <-time.After(2 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -155,7 +154,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 type Result struct {
 	OpIndex int64
-	Value string
+	Value   string
 }
 
 func (kv *RaftKV) ApplyCommand(command Op) Result {
@@ -179,7 +178,7 @@ func (kv *RaftKV) ApplyCommand(command Op) Result {
 
 func (kv *RaftKV) loopForApplyMsg() {
 	for {
-		msg := <- kv.applyCh
+		msg := <-kv.applyCh
 		if msg.UseSnapshot {
 			data := msg.Snapshot
 			kv.deserializeSnapshot(data)

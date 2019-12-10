@@ -10,10 +10,10 @@ import "crypto/rand"
 import "math/big"
 
 type Clerk struct {
-	servers []*labrpc.ClientEnd
+	servers      []*labrpc.ClientEnd
 	lastLeaderId int
-	clientId int64
-	opIndex int64
+	clientId     int64
+	opIndex      int64
 }
 
 func nrand() int64 {
@@ -35,7 +35,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 }
 
 func (ck *Clerk) Query(num int) Config {
-	ck.opIndex ++
+	ck.opIndex++
 	args := &QueryArgs{num, ck.clientId, ck.opIndex}
 
 	for {
@@ -52,7 +52,7 @@ func (ck *Clerk) Query(num int) Config {
 }
 
 func (ck *Clerk) Join(servers map[int][]string) {
-	ck.opIndex ++
+	ck.opIndex++
 	args := &JoinArgs{servers, ck.clientId, ck.opIndex}
 
 	for {
@@ -69,7 +69,7 @@ func (ck *Clerk) Join(servers map[int][]string) {
 }
 
 func (ck *Clerk) Leave(gids []int) {
-	ck.opIndex ++
+	ck.opIndex++
 	args := &LeaveArgs{gids, ck.clientId, ck.opIndex}
 
 	for {
@@ -86,7 +86,7 @@ func (ck *Clerk) Leave(gids []int) {
 }
 
 func (ck *Clerk) Move(shard int, gid int) {
-	ck.opIndex ++
+	ck.opIndex++
 	args := &MoveArgs{shard, gid, ck.clientId, ck.opIndex}
 
 	for {

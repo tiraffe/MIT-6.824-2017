@@ -1,18 +1,17 @@
 package raftkv
 
 import (
-	"time"
-	"labrpc"
 	"crypto/rand"
+	"labrpc"
 	"math/big"
+	"time"
 )
 
-
 type Clerk struct {
-	servers []*labrpc.ClientEnd
+	servers      []*labrpc.ClientEnd
 	lastLeaderId int
-	clientId int64
-	opIndex int64
+	clientId     int64
+	opIndex      int64
 }
 
 func nrand() int64 {
@@ -46,8 +45,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 //
 func (ck *Clerk) Get(key string) string {
 	DPrintf("Get(%s): Strat...", key)
-	ck.opIndex ++
-	
+	ck.opIndex++
+
 	var result string
 	leaderId := ck.lastLeaderId
 	for {
@@ -86,7 +85,7 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	DPrintf("PutAppend(%s, %s, %s): Strat...", key, value, op)
-	ck.opIndex ++
+	ck.opIndex++
 
 	leaderId := ck.lastLeaderId
 	for {

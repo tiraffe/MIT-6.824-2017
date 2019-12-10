@@ -1,17 +1,15 @@
 package shardmaster
 
-
 import (
-	"sort"
-	"raft"
-	"labrpc"
-	"sync"
-	"log"
-	"time"
 	"bytes"
 	"encoding/gob"
+	"labrpc"
+	"log"
+	"raft"
+	"sort"
+	"sync"
+	"time"
 )
-
 
 type ShardMaster struct {
 	mu      sync.Mutex
@@ -21,8 +19,8 @@ type ShardMaster struct {
 
 	maxraftstate int // snapshot if log grows this big
 
-	callbackCh map[int64]chan Result // [clientId] result
-	lastCommitedOpIndex map[int64]int64 
+	callbackCh           map[int64]chan Result // [clientId] result
+	lastCommitedOpIndex  map[int64]int64
 	lastCommitedLogIndex int
 
 	configs []Config // indexed by config num
@@ -34,20 +32,20 @@ type MovePair struct {
 }
 
 type Op struct {
-	Servers map[int][]string 	// Join 
-	GIDs    []int            	// Leave
-	Shard   int              	// Move
-	GID     int              	// Move
-	Num     int              	// Query
+	Servers map[int][]string // Join
+	GIDs    []int            // Leave
+	Shard   int              // Move
+	GID     int              // Move
+	Num     int              // Query
 
-	ClientId	int64
-	OpType		string
-	OpIndex		int64
+	ClientId int64
+	OpType   string
+	OpIndex  int64
 }
 
 type Result struct {
 	OpIndex int64
-	Value 	Config
+	Value   Config
 }
 
 const Debug = 0
@@ -75,18 +73,18 @@ func (sm *ShardMaster) Join(args *JoinArgs, reply *JoinReply) {
 		sm.createCallbackChan(args.ClientId)
 
 		sm.rf.Start(Op{
-			Servers: args.Servers, 
-			ClientId: args.ClientId, 
-			OpType: "Join",
-			OpIndex: args.OpIndex,
+			Servers:  args.Servers,
+			ClientId: args.ClientId,
+			OpType:   "Join",
+			OpIndex:  args.OpIndex,
 		})
 
 		select {
-		case res := <- sm.callbackCh[args.ClientId]:
+		case res := <-sm.callbackCh[args.ClientId]:
 			if res.OpIndex == args.OpIndex {
 				reply.Err = OK
 			}
-		case <- time.After(2 * time.Second):
+		case <-time.After(2 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -104,18 +102,18 @@ func (sm *ShardMaster) Leave(args *LeaveArgs, reply *LeaveReply) {
 		sm.createCallbackChan(args.ClientId)
 
 		sm.rf.Start(Op{
-			GIDs: args.GIDs, 
-			ClientId: args.ClientId, 
-			OpType: "Leave",
-			OpIndex: args.OpIndex,
+			GIDs:     args.GIDs,
+			ClientId: args.ClientId,
+			OpType:   "Leave",
+			OpIndex:  args.OpIndex,
 		})
 
 		select {
-		case res := <- sm.callbackCh[args.ClientId]:
+		case res := <-sm.callbackCh[args.ClientId]:
 			if res.OpIndex == args.OpIndex {
 				reply.Err = OK
 			}
-		case <- time.After(2 * time.Second):
+		case <-time.After(2 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -133,19 +131,19 @@ func (sm *ShardMaster) Move(args *MoveArgs, reply *MoveReply) {
 		sm.createCallbackChan(args.ClientId)
 
 		sm.rf.Start(Op{
-			Shard: args.Shard,
-			GID: args.GID,
-			ClientId: args.ClientId, 
-			OpType: "Move",
-			OpIndex: args.OpIndex,	
+			Shard:    args.Shard,
+			GID:      args.GID,
+			ClientId: args.ClientId,
+			OpType:   "Move",
+			OpIndex:  args.OpIndex,
 		})
 
 		select {
-		case res := <- sm.callbackCh[args.ClientId]:
+		case res := <-sm.callbackCh[args.ClientId]:
 			if res.OpIndex == args.OpIndex {
 				reply.Err = OK
 			}
-		case <- time.After(2 * time.Second):
+		case <-time.After(2 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -163,19 +161,19 @@ func (sm *ShardMaster) Query(args *QueryArgs, reply *QueryReply) {
 		sm.createCallbackChan(args.ClientId)
 
 		sm.rf.Start(Op{
-			Num: args.Num, 
-			ClientId: args.ClientId, 
-			OpType: "Query",
-			OpIndex: args.OpIndex,
+			Num:      args.Num,
+			ClientId: args.ClientId,
+			OpType:   "Query",
+			OpIndex:  args.OpIndex,
 		})
 
 		select {
-		case res := <- sm.callbackCh[args.ClientId]:
+		case res := <-sm.callbackCh[args.ClientId]:
 			if res.OpIndex == args.OpIndex {
 				reply.Err = OK
 				reply.Config = res.Value
 			}
-		case <- time.After(2 * time.Second):
+		case <-time.After(2 * time.Second):
 			reply.Err = TimeOut
 		}
 	} else {
@@ -224,7 +222,7 @@ func (sm *ShardMaster) ApplyCommand(command Op) Result {
 			config := sm.getConfig(-1)
 			config.Shards[command.Shard] = command.GID
 			config.Num += 1
-			sm.configs = append(sm.configs, config) 
+			sm.configs = append(sm.configs, config)
 		case "Query":
 			result.Value = sm.getConfig(command.Num)
 			DPrintf("------------ Query %d: %v", command.Num, result.Value)
@@ -239,7 +237,7 @@ func (sm *ShardMaster) ApplyCommand(command Op) Result {
 func (sm *ShardMaster) getConfig(index int) Config {
 	var oldConfig *Config
 	if index < 0 || index >= len(sm.configs) {
-		oldConfig = &sm.configs[len(sm.configs) - 1]
+		oldConfig = &sm.configs[len(sm.configs)-1]
 	} else {
 		oldConfig = &sm.configs[index]
 	}
@@ -253,7 +251,7 @@ func (sm *ShardMaster) getConfig(index int) Config {
 
 func (sm *ShardMaster) loopForApplyMsg() {
 	for {
-		msg := <- sm.applyCh
+		msg := <-sm.applyCh
 
 		if msg.UseSnapshot {
 			data := msg.Snapshot
@@ -324,23 +322,23 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 }
 
 type ShardCountPair struct {
-	GID int
+	GID        int
 	ShardCount int
 }
 
 type ShardCountPairList []ShardCountPair
 
-func (p ShardCountPairList) Len() int { return len(p) }
+func (p ShardCountPairList) Len() int           { return len(p) }
 func (p ShardCountPairList) Less(i, j int) bool { return p[i].ShardCount < p[j].ShardCount }
-func (p ShardCountPairList) Swap(i, j int){ p[i], p[j] = p[j], p[i] }
+func (p ShardCountPairList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func (sm *ShardMaster) updateConfig (config Config) {
+func (sm *ShardMaster) updateConfig(config Config) {
 	groupNum := len(config.Groups)
 	movingShard := make(chan int, NShards)
 
 	// group by GID and add the shards which in a deleted GID to moving list.
 	shardsList := make(map[int][]int)
-	for shard := 0; shard < NShards; shard ++ {
+	for shard := 0; shard < NShards; shard++ {
 		GID := config.Shards[shard]
 		if _, ok := config.Groups[GID]; ok {
 			shardsList[GID] = append(shardsList[GID], shard)
@@ -361,21 +359,20 @@ func (sm *ShardMaster) updateConfig (config Config) {
 
 	for i := 0; i < len(kvs); i++ {
 		expected := NShards / groupNum
-		if i < NShards % groupNum {
-			expected ++
+		if i < NShards%groupNum {
+			expected++
 		}
 		// re-balance shard
 		for k := 0; kvs[i].ShardCount > expected; k++ {
-			kvs[i].ShardCount --
+			kvs[i].ShardCount--
 			movingShard <- shardsList[kvs[i].GID][k]
 		}
 		for kvs[i].ShardCount < expected {
-			kvs[i].ShardCount ++
-			thisShard := <- movingShard
+			kvs[i].ShardCount++
+			thisShard := <-movingShard
 			config.Shards[thisShard] = kvs[i].GID
 		}
 	}
 	config.Num += 1
-	sm.configs = append(sm.configs, config) 
+	sm.configs = append(sm.configs, config)
 }
-
